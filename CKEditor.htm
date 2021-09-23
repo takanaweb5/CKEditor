@@ -1,0 +1,73 @@
+<script src="https://cdn.ckeditor.com/4.16.0/full-all/ckeditor.js"></script>
+<form>
+<textarea name="editor1" id="editor1"></textarea>
+</form> 
+
+<script>
+//ファイルを開くボタン押下時のファイル読込み処理
+function onOpenFileChange(event) {
+  const file = event.target.files[0];
+  if(file){
+    filename = file.name;
+    const reader = new FileReader();
+    reader.readAsText(file);
+    reader.onload = () => {
+        editor.setData( reader.result );
+    };
+  }
+}
+
+//ファイルを開くボタン押下処理
+function OpenFile(editor) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'text/html';
+  input.setAttribute('onchange', 'onOpenFileChange(event)');
+  input.click();
+}
+
+//保存ボタン押下処理
+function SaveFile(editor) {
+  const a = document.createElement('a');
+  a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(editor.getData());
+  a.download = filename;
+  a.click();
+}
+
+CKEDITOR.on('instanceReady', function (event) {
+    //保存ボタン置換え
+    var overridecmd = new CKEDITOR.command(editor, {exec: SaveFile});
+    event.editor.commands['save'].exec = overridecmd.exec;
+
+    //最大化する
+    event.editor.execCommand('maximize');
+});
+
+let filename = '';
+//インデント（字下げ）の単位を1文字に変更する
+CKEDITOR.config.indentUnit = 'em';
+CKEDITOR.config.indentOffset = 1;
+//スキンを適用し、見た目を変更する
+CKEDITOR.config.skin = 'moono'; 
+//ユーザ定義のCSSを適用する
+CKEDITOR.config.contentsCss =  [ './style.css']; 
+const editor = CKEDITOR.replace('editor1');
+
+//エディタのプラグインが呼び出される際のcallback
+editor.on('pluginsLoaded', function(event) {
+  //ファイルを開くボタンを追加する
+  this.ui.addButton('openFile', {
+    label: 'ファイルを開く', 
+    command: 'openFile', 
+    toolbar: 'document,3',  //ボタンを追加するtoolbarと位置を指定
+    icon: 'https://icongr.am/fontawesome/folder-open-o.svg' 
+  });
+  this.addCommand('openFile', {exec: OpenFile});
+});
+
+//ウィンドウを閉じる時に確認メッセージを表示させる
+window.addEventListener('beforeunload', function(event) {
+  event.preventDefault();
+  event.returnValue = '';
+});
+</script>
