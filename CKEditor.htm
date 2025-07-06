@@ -249,15 +249,6 @@
     });
     this.addCommand('openFile', { exec: OpenFile });
 
-    //プレビューボタンを追加する
-    this.ui.addButton('previewFile', {
-      label: 'プレビュー',
-      command: 'previewFile',
-      toolbar: 'document,4',  //ボタンを追加するtoolbarと位置を指定
-      icon: 'https://icongr.am/fontawesome/eye.svg'
-    });
-    this.addCommand('previewFile', { exec: PreviewFile });
-
     //フォントサイズ拡大ボタンを追加する
     this.ui.addButton('increaseFontSize', {
       label: 'フォントサイズ拡大',
