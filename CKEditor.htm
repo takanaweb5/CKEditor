@@ -60,27 +60,99 @@
       const range = ranges[i];
 
       if (range.collapsed) {
-        // 選択範囲がない場合は何もしない
-        continue;
+        // 選択範囲がない場合、直近のSPANタグを探す
+        const startContainer = range.startContainer;
+        const closestSpan = findClosestSpan(startContainer);
+
+        if (closestSpan) {
+          // SPANタグが見つかった場合、そのSPANの範囲を選択
+          const newRange = editor.createRange();
+          newRange.selectNodeContents(closestSpan);
+
+          // SPANのfont-sizeを調整
+          const currentSize = getCurrentFontSize(closestSpan);
+          const newSize = currentSize + adjustment;
+          const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
+
+          closestSpan.setStyle('font-size', clampedSize.toFixed(1) + 'em');
+
+          // 新しい範囲を選択
+          selection.selectRanges([newRange]);
+        }
+        // SPANタグがない場合は何もしない
       } else {
         // 選択範囲がある場合
-        const contents = range.extractContents();
-        const span = new CKEDITOR.dom.element('span');
+        // 選択範囲がSPAN要素と完全に一致するかチェック
+        const selectedSpan = checkIfSelectionMatchesSpan(range);
 
-        // 現在のフォントサイズを取得
-        const currentSize = getCurrentFontSize(range.startContainer);
-        const newSize = currentSize + adjustment;
+        if (selectedSpan) {
+          // 選択範囲がSPAN要素と一致する場合、そのSPANのfont-sizeを調整
+          const currentSize = getCurrentFontSize(selectedSpan);
+          const newSize = currentSize + adjustment;
+          const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
 
-        // 最小0.5em、最大5emに制限
-        const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
+          selectedSpan.setStyle('font-size', clampedSize.toFixed(1) + 'em');
+        } else {
+          // 選択範囲がSPAN要素と一致しない場合、新しいSPANを作成
+          const contents = range.extractContents();
+          const span = new CKEDITOR.dom.element('span');
 
-        span.setStyle('font-size', clampedSize.toFixed(1) + 'em');
-        span.append(contents);
-        range.insertNode(span);
+          // 現在のフォントサイズを取得
+          const currentSize = getCurrentFontSize(range.startContainer);
+          const newSize = currentSize + adjustment;
+
+          // 最小0.5em、最大5emに制限
+          const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
+
+          span.setStyle('font-size', clampedSize.toFixed(1) + 'em');
+          span.append(contents);
+          range.insertNode(span);
+
+          // DOM操作後の同期待機（CKEditorのDOM更新完了を確実に待つ）
+          setTimeout(() => {
+            // 挿入したSPANの内容を再選択（次回の操作で既存SPANとして認識されるように）
+            const newRange = editor.createRange();
+            newRange.selectNodeContents(span);
+            selection.selectRanges([newRange]);
+          }, 0); // 次のイベントループで実行
+        }
       }
     }
 
-    selection.selectRanges(ranges);
+    if (!ranges[0].collapsed) {
+      selection.selectRanges(ranges);
+    }
+  }
+
+  // 直近のSPANタグを探す関数
+  function findClosestSpan(node) {
+    let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
+
+    while (element && element.type === CKEDITOR.NODE_ELEMENT) {
+      if (element.getName() === 'span') {
+        return element;
+      }
+      element = element.getParent();
+    }
+
+    return null; // SPANタグが見つからない場合
+  }
+
+  // 選択範囲がSPAN要素と完全に一致するかチェックする関数
+  function checkIfSelectionMatchesSpan(range) {
+    const startContainer = range.startContainer;
+    const endContainer = range.endContainer;
+
+    if (startContainer.type === CKEDITOR.NODE_ELEMENT && endContainer.type === CKEDITOR.NODE_ELEMENT) {
+      const startSpan = startContainer.getName() === 'span' ? startContainer : findClosestSpan(startContainer);
+      const endSpan = endContainer.getName() === 'span' ? endContainer : findClosestSpan(endContainer);
+
+      if (startSpan && endSpan && startSpan.equals(endSpan)) {
+        return startSpan;
+      }
+    }
+
+    return null; // 選択範囲がSPAN要素と一致しない場合
   }
 
   // フォントサイズ拡大機能
@@ -190,8 +262,7 @@
     this.ui.addButton('increaseFontSize', {
       label: 'フォントサイズ拡大',
       command: 'increaseFontSize',
-      toolbar: 'document,5',  //ボタンを追加するtoolbarと位置を指定
-      icon: 'https://icongr.am/fontawesome/plus.svg'
+      toolbar: 'basicstyles,1',  //ボタンを追加するtoolbarと位置を指定
     });
     this.addCommand('increaseFontSize', { exec: IncreaseFontSize });
 
@@ -199,8 +270,7 @@
     this.ui.addButton('decreaseFontSize', {
       label: 'フォントサイズ縮小',
       command: 'decreaseFontSize',
-      toolbar: 'document,6',  //ボタンを追加するtoolbarと位置を指定
-      icon: 'https://icongr.am/fontawesome/minus.svg'
+      toolbar: 'basicstyles,2',  //ボタンを追加するtoolbarと位置を指定
     });
     this.addCommand('decreaseFontSize', { exec: DecreaseFontSize });
   });
@@ -211,3 +281,11 @@
     event.returnValue = '';
   });
 </script>
+<style>
+  .cke_button_icon.cke_button__increaseFontSize_icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Ctext x='0' y='14' font-family='Arial,sans-serif' font-size='14' font-weight='bold' fill='%23666'%3EA%3C/text%3E%3Ctext x='11' y='6' font-family='Arial,sans-serif' font-size='7' font-weight='bold' fill='%23666'%3E%2B%3C/text%3E%3C/svg%3E");
+  }
+  .cke_button_icon.cke_button__decreaseFontSize_icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Ctext x='0' y='14' font-family='Arial,sans-serif' font-size='14' font-weight='bold' fill='%23666'%3EA%3C/text%3E%3Ctext x='11' y='8' font-family='Arial,sans-serif' font-size='7' font-weight='bold' fill='%23666'%3E%E2%88%92%3C/text%3E%3C/svg%3E");
+  }
+</style>
