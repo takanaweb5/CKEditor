@@ -44,6 +44,71 @@
       element.setStyle('font-size', clampedSize.toFixed(1) + 'em');
     }
 
+    // 直近のインライン要素（SPAN、STRONG、S、U、EM）を探す関数
+    function findClosestSpan(node) {
+      let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
+      while (element && element.type === CKEDITOR.NODE_ELEMENT) {
+        const tagName = element.getName();
+        if (tagName === 'span' || tagName === 'strong' || tagName === 's' || tagName === 'u' || tagName === 'em') {
+          return element;
+        }
+        element = element.getParent();
+      }
+      return null; // 対象タグが見つからない場合
+    }
+
+    // 選択範囲がSPAN要素と完全に一致するかチェックする関数（SPANのみ対象）
+    function checkIfSelectionMatchesSpan(range) {
+      const startContainer = range.startContainer;
+      const endContainer = range.endContainer;
+      if (startContainer.type === CKEDITOR.NODE_ELEMENT && endContainer.type === CKEDITOR.NODE_ELEMENT) {
+        // SPANのみをチェック（他のインライン要素は新しいSPANで囲む）
+        const startSpan = startContainer.getName() === 'span' ? startContainer : null;
+        const endSpan = endContainer.getName() === 'span' ? endContainer : null;
+
+        if (startSpan && endSpan && startSpan.equals(endSpan)) {
+          return startSpan;
+        }
+      }
+      return null; // 選択範囲がSPAN要素と一致しない場合
+    }
+
+    // 現在のフォントサイズを取得（em単位で返す）
+    function getCurrentFontSize(node) {
+      let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
+      while (element && element.type === CKEDITOR.NODE_ELEMENT) {
+        const fontSize = element.getStyle('font-size');
+        if (fontSize) {
+          // font-sizeが見つかったら単位を変換してem値で返す
+          if (fontSize.includes('em')) return parseFloat(fontSize);
+          if (fontSize.includes('px')) return parseFloat(fontSize) / 16;
+          if (fontSize.includes('%')) return parseFloat(fontSize) / 100;
+        }
+        element = element.getParent();
+      }
+      return 1.0; // デフォルトサイズ（1em）
+    }
+
+    // 新しいSPANで囲む共通処理
+    function wrapWithNewSpan(targetRange, direction, sourceElement) {
+      const contents = targetRange.extractContents();
+      const span = new CKEDITOR.dom.element('span');
+
+      // 現在のフォントサイズを取得して新しいSPANに設定
+      adjustElementFontSize(span, direction, sourceElement);
+
+      span.append(contents);
+      targetRange.insertNode(span);
+
+      // DOM操作後の同期待機（CKEditorのDOM更新完了を確実に待つ）
+      setTimeout(() => {
+        // 挿入したSPANの内容を再選択（次回の操作で既存SPANとして認識されるように）
+        const finalRange = editor.createRange();
+        finalRange.selectNodeContents(span);
+        selection.selectRanges([finalRange]);
+      }, 0); // 次のイベントループで実行
+    }
+
     const selection = editor.getSelection();
     const ranges = selection.getRanges();
     if (ranges.length === 0) return;
@@ -52,117 +117,49 @@
       const range = ranges[i];
 
       if (range.collapsed) {
-        // 選択範囲がない場合、直近のSPANタグを探す
+        // 選択範囲がない場合、直近のインライン要素を探す
         const startContainer = range.startContainer;
         const closestSpan = findClosestSpan(startContainer);
 
         if (closestSpan) {
-          // SPANタグが見つかった場合、そのSPANの範囲を選択
+          // 対象タグが見つかった場合、そのタグの範囲を選択
           const newRange = editor.createRange();
           newRange.selectNodeContents(closestSpan);
 
-          // SPANのfont-sizeを調整
-          adjustElementFontSize(closestSpan, direction);
+          if (closestSpan.getName() === 'span') {
+            // 直近のタグがSPANの場合は、既存のSPANのfont-sizeを調整
+            adjustElementFontSize(closestSpan, direction);
 
-          // 新しい範囲を選択
-          selection.selectRanges([newRange]);
+            // 既存のSPANを再選択
+            selection.selectRanges([newRange]);
+          } else {
+            // 直近のタグがSPAN以外の場合は、新しいSPANで囲む
+            wrapWithNewSpan(newRange, direction, closestSpan);
+          }
         }
-        // SPANタグがない場合は何もしない
       } else {
         // 選択範囲がある場合
         // 選択範囲がSPAN要素と完全に一致するかチェック
         const selectedSpan = checkIfSelectionMatchesSpan(range);
 
         if (selectedSpan) {
-          // 選択範囲がSPAN要素と一致する場合、そのSPANのfont-sizeを調整
+          // 選択範囲がSPAN要素と一致する場合、そのタグのfont-sizeを調整
           adjustElementFontSize(selectedSpan, direction);
         } else {
           // 選択範囲がSPAN要素と一致しない場合、新しいSPANを作成
-          const contents = range.extractContents();
-          const span = new CKEDITOR.dom.element('span');
-
-          // 現在のフォントサイズを取得して新しいSPANに設定
-          adjustElementFontSize(span, direction, range.startContainer);
-
-          span.append(contents);
-          range.insertNode(span);
-
-          // DOM操作後の同期待機（CKEditorのDOM更新完了を確実に待つ）
-          setTimeout(() => {
-            // 挿入したSPANの内容を再選択（次回の操作で既存SPANとして認識されるように）
-            const newRange = editor.createRange();
-            newRange.selectNodeContents(span);
-            selection.selectRanges([newRange]);
-          }, 0); // 次のイベントループで実行
+          wrapWithNewSpan(range, direction, range.startContainer);
         }
       }
     }
-
-    if (!ranges[0].collapsed) {
-      selection.selectRanges(ranges);
-    }
-  }
-
-  // 直近のSPANタグを探す関数
-  function findClosestSpan(node) {
-    let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
-
-    while (element && element.type === CKEDITOR.NODE_ELEMENT) {
-      if (element.getName() === 'span') {
-        return element;
-      }
-      element = element.getParent();
-    }
-    return null; // SPANタグが見つからない場合
-  }
-
-  // 選択範囲がSPAN要素と完全に一致するかチェックする関数
-  function checkIfSelectionMatchesSpan(range) {
-    const startContainer = range.startContainer;
-    const endContainer = range.endContainer;
-
-    if (startContainer.type === CKEDITOR.NODE_ELEMENT && endContainer.type === CKEDITOR.NODE_ELEMENT) {
-      const startSpan = startContainer.getName() === 'span' ? startContainer : findClosestSpan(startContainer);
-      const endSpan = endContainer.getName() === 'span' ? endContainer : findClosestSpan(endContainer);
-
-      if (startSpan && endSpan && startSpan.equals(endSpan)) {
-        return startSpan;
-      }
-    }
-    return null; // 選択範囲がSPAN要素と一致しない場合
   }
 
   // フォントサイズ拡大機能
   function IncreaseFontSize(editor) {
     AdjustFontSize(editor, 0.1);
   }
-
   // フォントサイズ縮小機能
   function DecreaseFontSize(editor) {
     AdjustFontSize(editor, -0.1);
-  }
-
-  // 現在のフォントサイズを取得（em単位で返す）
-  function getCurrentFontSize(node) {
-    let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
-
-    while (element && element.type === CKEDITOR.NODE_ELEMENT) {
-      const fontSize = element.getStyle('font-size');
-      if (fontSize) {
-        if (fontSize.includes('em')) {
-          return parseFloat(fontSize);
-        } else if (fontSize.includes('px')) {
-          // pxをemに変換（16px = 1em として計算）
-          return parseFloat(fontSize) / 16;
-        } else if (fontSize.includes('%')) {
-          // %をemに変換
-          return parseFloat(fontSize) / 100;
-        }
-      }
-      element = element.getParent();
-    }
-
-    return 1.0; // デフォルトサイズ（1em）
   }
 
   CKEDITOR.on('instanceReady', function (event) {
@@ -175,6 +172,8 @@
   });
 
   let filename = '';
+  //警告を非表示
+  CKEDITOR.config.versionCheck = false;
   //インデント（字下げ）の単位を1文字に変更する
   CKEDITOR.config.indentUnit = 'em';
   CKEDITOR.config.indentOffset = 1;
@@ -224,6 +223,7 @@
   .cke_button_icon.cke_button__increaseFontSize_icon {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Ctext x='0' y='14' font-family='Arial,sans-serif' font-size='14' font-weight='bold' fill='%23666'%3EA%3C/text%3E%3Ctext x='11' y='6' font-family='Arial,sans-serif' font-size='7' font-weight='bold' fill='%23666'%3E%2B%3C/text%3E%3C/svg%3E");
   }
+
   .cke_button_icon.cke_button__decreaseFontSize_icon {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Ctext x='0' y='14' font-family='Arial,sans-serif' font-size='14' font-weight='bold' fill='%23666'%3EA%3C/text%3E%3Ctext x='11' y='8' font-family='Arial,sans-serif' font-size='7' font-weight='bold' fill='%23666'%3E%E2%88%92%3C/text%3E%3C/svg%3E");
   }
