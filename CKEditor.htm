@@ -1,73 +1,213 @@
-<script src="https://cdn.ckeditor.com/4.16.0/full-all/ckeditor.js"></script>
+<script src="https://cdn.ckeditor.com/4.22.1/full-all/ckeditor.js"></script>
 <form>
-<textarea name="editor1" id="editor1"></textarea>
-</form> 
+  <textarea name="editor1" id="editor1"></textarea>
+</form>
 
 <script>
-//ファイルを開くボタン押下時のファイル読込み処理
-function onOpenFileChange(event) {
-  const file = event.target.files[0];
-  if(file){
-    filename = file.name;
-    const reader = new FileReader();
-    reader.readAsText(file);
-    reader.onload = () => {
-        editor.setData( reader.result );
-    };
+  //ファイルを開くボタン押下時のファイル読込み処理
+  function onOpenFileChange(event) {
+    const file = event.target.files[0];
+    if (file) {
+      filename = file.name;
+      const reader = new FileReader();
+      reader.readAsText(file);
+      reader.onload = () => {
+        editor.setData(reader.result);
+      };
+    }
   }
-}
 
-//ファイルを開くボタン押下処理
-function OpenFile(editor) {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'text/html';
-  input.setAttribute('onchange', 'onOpenFileChange(event)');
-  input.click();
-}
+  //ファイルを開くボタン押下処理
+  function OpenFile(editor) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'text/html';
+    input.setAttribute('onchange', 'onOpenFileChange(event)');
+    input.click();
+  }
 
-//保存ボタン押下処理
-function SaveFile(editor) {
-  const a = document.createElement('a');
-  a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(editor.getData());
-  a.download = filename;
-  a.click();
-}
+  //保存ボタン押下処理
+  function SaveFile(editor) {
+    const a = document.createElement('a');
+    a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(editor.getData());
+    a.download = filename;
+    a.click();
+  }
 
-CKEDITOR.on('instanceReady', function (event) {
+  //プレビューボタン押下処理
+  function PreviewFile(editor) {
+    const htmlContent = editor.getData();
+    const previewWindow = window.open('', 'preview', 'width=1000,height=800,scrollbars=yes,resizable=yes');
+
+    // プレビューウィンドウのHTMLを構築
+    const previewHTML = htmlContent;
+
+    previewWindow.document.write(previewHTML);
+    previewWindow.document.close();
+    previewWindow.focus();
+  }
+
+  // フォントサイズ調整機能（em単位で±0.1emずつ）
+  function AdjustFontSize(editor, direction) {
+    const selection = editor.getSelection();
+    const ranges = selection.getRanges();
+
+    if (ranges.length === 0) return;
+
+    const adjustment = direction * 0.1; // +1なら+0.1em、-1なら-0.1em
+
+    for (let i = 0; i < ranges.length; i++) {
+      const range = ranges[i];
+
+      if (range.collapsed) {
+        // 選択範囲がない場合は何もしない
+        continue;
+      } else {
+        // 選択範囲がある場合
+        const contents = range.extractContents();
+        const span = new CKEDITOR.dom.element('span');
+
+        // 現在のフォントサイズを取得
+        const currentSize = getCurrentFontSize(range.startContainer);
+        const newSize = currentSize + adjustment;
+
+        // 最小0.5em、最大5emに制限
+        const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
+
+        span.setStyle('font-size', clampedSize.toFixed(1) + 'em');
+        span.append(contents);
+        range.insertNode(span);
+      }
+    }
+
+    selection.selectRanges(ranges);
+  }
+
+  // フォントサイズ拡大機能
+  function IncreaseFontSize(editor) {
+    AdjustFontSize(editor, 1); // +1で拡大
+  }
+
+  // フォントサイズ縮小機能
+  function DecreaseFontSize(editor) {
+    AdjustFontSize(editor, -1); // -1で縮小
+  }
+
+  // 現在のフォントサイズを取得（em単位で返す）
+  function getCurrentFontSize(node) {
+    let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
+
+    while (element && element.type === CKEDITOR.NODE_ELEMENT) {
+      const fontSize = element.getStyle('font-size');
+      if (fontSize) {
+        if (fontSize.includes('em')) {
+          return parseFloat(fontSize);
+        } else if (fontSize.includes('px')) {
+          // pxをemに変換（16px = 1em として計算）
+          return parseFloat(fontSize) / 16;
+        } else if (fontSize.includes('%')) {
+          // %をemに変換
+          return parseFloat(fontSize) / 100;
+        }
+      }
+      element = element.getParent();
+    }
+
+    return 1.0; // デフォルトサイズ（1em）
+  }
+
+  // 要素のフォントサイズを調整
+  function adjustElementFontSize(element, adjustment) {
+    if (!element || element.type !== CKEDITOR.NODE_ELEMENT) return;
+
+    const currentSize = getCurrentFontSize(element);
+    const newSize = currentSize + adjustment;
+
+    // 最小0.5em、最大5emに制限
+    const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
+
+    if (element.getName() === 'span' || element.hasAttribute('style')) {
+      element.setStyle('font-size', clampedSize.toFixed(1) + 'em');
+    } else {
+      // 新しいspanで囲む
+      const span = new CKEDITOR.dom.element('span');
+      span.setStyle('font-size', clampedSize.toFixed(1) + 'em');
+
+      // 要素の内容をspanに移動
+      const children = element.getChildren();
+      for (let i = 0; i < children.count(); i++) {
+        const child = children.getItem(i);
+        span.append(child.clone(true));
+      }
+
+      element.setHtml('');
+      element.append(span);
+    }
+  }
+
+  CKEDITOR.on('instanceReady', function (event) {
     //保存ボタン置換え
-    var overridecmd = new CKEDITOR.command(editor, {exec: SaveFile});
+    var overridecmd = new CKEDITOR.command(editor, { exec: SaveFile });
     event.editor.commands['save'].exec = overridecmd.exec;
 
     //最大化する
     event.editor.execCommand('maximize');
-});
-
-let filename = '';
-//インデント（字下げ）の単位を1文字に変更する
-CKEDITOR.config.indentUnit = 'em';
-CKEDITOR.config.indentOffset = 1;
-//スキンを適用し、見た目を変更する
-CKEDITOR.config.skin = 'moono'; 
-//ユーザ定義のCSSを適用する
-CKEDITOR.config.contentsCss =  [ './style.css']; 
-const editor = CKEDITOR.replace('editor1');
-
-//エディタのプラグインが呼び出される際のcallback
-editor.on('pluginsLoaded', function(event) {
-  //ファイルを開くボタンを追加する
-  this.ui.addButton('openFile', {
-    label: 'ファイルを開く', 
-    command: 'openFile', 
-    toolbar: 'document,3',  //ボタンを追加するtoolbarと位置を指定
-    icon: 'https://icongr.am/fontawesome/folder-open-o.svg' 
   });
-  this.addCommand('openFile', {exec: OpenFile});
-});
 
-//ウィンドウを閉じる時に確認メッセージを表示させる
-window.addEventListener('beforeunload', function(event) {
-  event.preventDefault();
-  event.returnValue = '';
-});
+  let filename = '';
+  //インデント（字下げ）の単位を1文字に変更する
+  CKEDITOR.config.indentUnit = 'em';
+  CKEDITOR.config.indentOffset = 1;
+  //スキンを適用し、見た目を変更する
+  CKEDITOR.config.skin = 'moono';
+  //ユーザ定義のCSSを適用する
+  CKEDITOR.config.contentsCss = ['./style.css'];
+  //HTMLタグとスタイルの制限を解除
+  CKEDITOR.config.allowedContent = true;
+  const editor = CKEDITOR.replace('editor1');
+
+  //エディタのプラグインが呼び出される際のcallback
+  editor.on('pluginsLoaded', function (event) {
+    //ファイルを開くボタンを追加する
+    this.ui.addButton('openFile', {
+      label: 'ファイルを開く',
+      command: 'openFile',
+      toolbar: 'document,3',  //ボタンを追加するtoolbarと位置を指定
+      icon: 'https://icongr.am/fontawesome/folder-open-o.svg'
+    });
+    this.addCommand('openFile', { exec: OpenFile });
+
+    //プレビューボタンを追加する
+    this.ui.addButton('previewFile', {
+      label: 'プレビュー',
+      command: 'previewFile',
+      toolbar: 'document,4',  //ボタンを追加するtoolbarと位置を指定
+      icon: 'https://icongr.am/fontawesome/eye.svg'
+    });
+    this.addCommand('previewFile', { exec: PreviewFile });
+
+    //フォントサイズ拡大ボタンを追加する
+    this.ui.addButton('increaseFontSize', {
+      label: 'フォントサイズ拡大',
+      command: 'increaseFontSize',
+      toolbar: 'document,5',  //ボタンを追加するtoolbarと位置を指定
+      icon: 'https://icongr.am/fontawesome/plus.svg'
+    });
+    this.addCommand('increaseFontSize', { exec: IncreaseFontSize });
+
+    //フォントサイズ縮小ボタンを追加する
+    this.ui.addButton('decreaseFontSize', {
+      label: 'フォントサイズ縮小',
+      command: 'decreaseFontSize',
+      toolbar: 'document,6',  //ボタンを追加するtoolbarと位置を指定
+      icon: 'https://icongr.am/fontawesome/minus.svg'
+    });
+    this.addCommand('decreaseFontSize', { exec: DecreaseFontSize });
+  });
+
+  //ウィンドウを閉じる時に確認メッセージを表示させる
+  window.addEventListener('beforeunload', function (event) {
+    event.preventDefault();
+    event.returnValue = '';
+  });
 </script>
