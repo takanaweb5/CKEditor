@@ -34,27 +34,19 @@
     a.click();
   }
 
-  //プレビューボタン押下処理
-  function PreviewFile(editor) {
-    const htmlContent = editor.getData();
-    const previewWindow = window.open('', 'preview', 'width=1000,height=800,scrollbars=yes,resizable=yes');
-
-    // プレビューウィンドウのHTMLを構築
-    const previewHTML = htmlContent;
-
-    previewWindow.document.write(previewHTML);
-    previewWindow.document.close();
-    previewWindow.focus();
-  }
-
-  // フォントサイズ調整機能（em単位で±0.1emずつ）
+  // フォントサイズ調整機能（em単位でdirection分ずつ）
   function AdjustFontSize(editor, direction) {
+    // フォントサイズ調整の共通関数（ローカル関数）
+    function adjustElementFontSize(element, direction, sourceElement = null) {
+      const currentSize = getCurrentFontSize(sourceElement || element);
+      const newSize = currentSize + direction;
+      const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
+      element.setStyle('font-size', clampedSize.toFixed(1) + 'em');
+    }
+
     const selection = editor.getSelection();
     const ranges = selection.getRanges();
-
     if (ranges.length === 0) return;
-
-    const adjustment = direction * 0.1; // +1なら+0.1em、-1なら-0.1em
 
     for (let i = 0; i < ranges.length; i++) {
       const range = ranges[i];
@@ -70,11 +62,7 @@
           newRange.selectNodeContents(closestSpan);
 
           // SPANのfont-sizeを調整
-          const currentSize = getCurrentFontSize(closestSpan);
-          const newSize = currentSize + adjustment;
-          const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
-
-          closestSpan.setStyle('font-size', clampedSize.toFixed(1) + 'em');
+          adjustElementFontSize(closestSpan, direction);
 
           // 新しい範囲を選択
           selection.selectRanges([newRange]);
@@ -87,24 +75,15 @@
 
         if (selectedSpan) {
           // 選択範囲がSPAN要素と一致する場合、そのSPANのfont-sizeを調整
-          const currentSize = getCurrentFontSize(selectedSpan);
-          const newSize = currentSize + adjustment;
-          const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
-
-          selectedSpan.setStyle('font-size', clampedSize.toFixed(1) + 'em');
+          adjustElementFontSize(selectedSpan, direction);
         } else {
           // 選択範囲がSPAN要素と一致しない場合、新しいSPANを作成
           const contents = range.extractContents();
           const span = new CKEDITOR.dom.element('span');
 
-          // 現在のフォントサイズを取得
-          const currentSize = getCurrentFontSize(range.startContainer);
-          const newSize = currentSize + adjustment;
+          // 現在のフォントサイズを取得して新しいSPANに設定
+          adjustElementFontSize(span, direction, range.startContainer);
 
-          // 最小0.5em、最大5emに制限
-          const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
-
-          span.setStyle('font-size', clampedSize.toFixed(1) + 'em');
           span.append(contents);
           range.insertNode(span);
 
@@ -134,7 +113,6 @@
       }
       element = element.getParent();
     }
-
     return null; // SPANタグが見つからない場合
   }
 
@@ -151,18 +129,17 @@
         return startSpan;
       }
     }
-
     return null; // 選択範囲がSPAN要素と一致しない場合
   }
 
   // フォントサイズ拡大機能
   function IncreaseFontSize(editor) {
-    AdjustFontSize(editor, 1); // +1で拡大
+    AdjustFontSize(editor, 0.1);
   }
 
   // フォントサイズ縮小機能
   function DecreaseFontSize(editor) {
-    AdjustFontSize(editor, -1); // -1で縮小
+    AdjustFontSize(editor, -0.1);
   }
 
   // 現在のフォントサイズを取得（em単位で返す）
@@ -186,35 +163,6 @@
     }
 
     return 1.0; // デフォルトサイズ（1em）
-  }
-
-  // 要素のフォントサイズを調整
-  function adjustElementFontSize(element, adjustment) {
-    if (!element || element.type !== CKEDITOR.NODE_ELEMENT) return;
-
-    const currentSize = getCurrentFontSize(element);
-    const newSize = currentSize + adjustment;
-
-    // 最小0.5em、最大5emに制限
-    const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
-
-    if (element.getName() === 'span' || element.hasAttribute('style')) {
-      element.setStyle('font-size', clampedSize.toFixed(1) + 'em');
-    } else {
-      // 新しいspanで囲む
-      const span = new CKEDITOR.dom.element('span');
-      span.setStyle('font-size', clampedSize.toFixed(1) + 'em');
-
-      // 要素の内容をspanに移動
-      const children = element.getChildren();
-      for (let i = 0; i < children.count(); i++) {
-        const child = children.getItem(i);
-        span.append(child.clone(true));
-      }
-
-      element.setHtml('');
-      element.append(span);
-    }
   }
 
   CKEDITOR.on('instanceReady', function (event) {
