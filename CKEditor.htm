@@ -49,7 +49,7 @@
       let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
       while (element && element.type === CKEDITOR.NODE_ELEMENT) {
         const tagName = element.getName();
-        if (tagName === 'span' || tagName === 'strong' || tagName === 's' || tagName === 'u' || tagName === 'em') {
+        if (['span', 'strong', 's', 'u', 'b', 'em'].includes(tagName)) {
           return element;
         }
         element = element.getParent();
@@ -57,20 +57,18 @@
       return null; // 対象タグが見つからない場合
     }
 
-    // 選択範囲がSPAN要素と完全に一致するかチェックする関数（SPANのみ対象）
-    function checkIfSelectionMatchesSpan(range) {
+    // 選択範囲が単一のSPAN要素と完全に一致するかどうかをチェックする関数
+    function isSelectionMatchingSpan(range) {
       const startContainer = range.startContainer;
       const endContainer = range.endContainer;
-      if (startContainer.type === CKEDITOR.NODE_ELEMENT && endContainer.type === CKEDITOR.NODE_ELEMENT) {
+      if (startContainer.type === CKEDITOR.NODE_ELEMENT
+        && endContainer.type === CKEDITOR.NODE_ELEMENT) {
         // SPANのみをチェック（他のインライン要素は新しいSPANで囲む）
         const startSpan = startContainer.getName() === 'span' ? startContainer : null;
         const endSpan = endContainer.getName() === 'span' ? endContainer : null;
-
-        if (startSpan && endSpan && startSpan.equals(endSpan)) {
-          return startSpan;
-        }
+        return !!(startSpan && endSpan && startSpan.equals(endSpan));
       }
-      return null; // 選択範囲がSPAN要素と一致しない場合
+      return false; // 選択範囲がSPAN要素と一致しない場合
     }
 
     // 現在のフォントサイズを取得（em単位で返す）
@@ -140,11 +138,9 @@
       } else {
         // 選択範囲がある場合
         // 選択範囲がSPAN要素と完全に一致するかチェック
-        const selectedSpan = checkIfSelectionMatchesSpan(range);
-
-        if (selectedSpan) {
+        if (isSelectionMatchingSpan(range)) {
           // 選択範囲がSPAN要素と一致する場合、そのタグのfont-sizeを調整
-          adjustElementFontSize(selectedSpan, direction);
+          adjustElementFontSize(range.startContainer, direction);
         } else {
           // 選択範囲がSPAN要素と一致しない場合、新しいSPANを作成
           wrapWithNewSpan(range, direction, range.startContainer);
