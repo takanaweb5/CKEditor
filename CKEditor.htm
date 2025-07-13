@@ -34,139 +34,6 @@
     a.click();
   }
 
-  // フォントサイズ調整機能（em単位でdirection分ずつ）
-  function AdjustFontSize(editor, direction) {
-    // フォントサイズ調整の共通関数（ローカル関数）
-    function adjustElementFontSize(element, direction, sourceElement = null) {
-      const currentSize = getCurrentFontSize(sourceElement || element);
-      const newSize = currentSize + direction;
-      const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
-      element.setStyle('font-size', clampedSize.toFixed(1) + 'em');
-    }
-
-    // 直近のインライン要素（SPAN、STRONG、S、U、EM）を探す関数
-    function findClosestSpan(node) {
-      let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
-      while (element && element.type === CKEDITOR.NODE_ELEMENT) {
-        const tagName = element.getName();
-        if (['span', 'strong', 's', 'u', 'b', 'em'].includes(tagName)) {
-          return element;
-        }
-        element = element.getParent();
-      }
-      return null; // 対象タグが見つからない場合
-    }
-
-    // 選択範囲が単一のSPAN要素と完全に一致するかどうかをチェックする関数
-    function isSelectionMatchingSpan(range) {
-      const startContainer = range.startContainer;
-      const endContainer = range.endContainer;
-      if (startContainer.type === CKEDITOR.NODE_ELEMENT
-        && endContainer.type === CKEDITOR.NODE_ELEMENT) {
-        // SPANのみをチェック（他のインライン要素は新しいSPANで囲む）
-        const startSpan = startContainer.getName() === 'span' ? startContainer : null;
-        const endSpan = endContainer.getName() === 'span' ? endContainer : null;
-        return !!(startSpan && endSpan && startSpan.equals(endSpan));
-      }
-      return false; // 選択範囲がSPAN要素と一致しない場合
-    }
-
-    // 現在のフォントサイズを取得（em単位で返す）
-    function getCurrentFontSize(node) {
-      let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
-      while (element && element.type === CKEDITOR.NODE_ELEMENT) {
-        const fontSize = element.getStyle('font-size');
-        if (fontSize) {
-          // font-sizeが見つかったら単位を変換してem値で返す
-          if (fontSize.includes('em')) return parseFloat(fontSize);
-          if (fontSize.includes('px')) return parseFloat(fontSize) / 16;
-          if (fontSize.includes('%')) return parseFloat(fontSize) / 100;
-        }
-        element = element.getParent();
-      }
-      return 1.0; // デフォルトサイズ（1em）
-    }
-
-    // 新しいSPANで囲む共通処理
-    function wrapWithNewSpan(targetRange, direction, sourceElement) {
-      const contents = targetRange.extractContents();
-      const span = new CKEDITOR.dom.element('span');
-
-      // 現在のフォントサイズを取得して新しいSPANに設定
-      adjustElementFontSize(span, direction, sourceElement);
-
-      span.append(contents);
-      targetRange.insertNode(span);
-
-      // DOM操作後の同期待機（CKEditorのDOM更新完了を確実に待つ）
-      setTimeout(() => {
-        // 挿入したSPANの内容を再選択（次回の操作で既存SPANとして認識されるように）
-        const finalRange = editor.createRange();
-        finalRange.selectNodeContents(span);
-        selection.selectRanges([finalRange]);
-      }, 0); // 次のイベントループで実行
-    }
-
-    const selection = editor.getSelection();
-    const ranges = selection.getRanges();
-    if (ranges.length === 0) return;
-
-    for (let i = 0; i < ranges.length; i++) {
-      const range = ranges[i];
-
-      if (range.collapsed) {
-        // 選択範囲がない場合、直近のインライン要素を探す
-        const startContainer = range.startContainer;
-        const closestSpan = findClosestSpan(startContainer);
-
-        if (closestSpan) {
-          // 対象タグが見つかった場合、そのタグの範囲を選択
-          const newRange = editor.createRange();
-          newRange.selectNodeContents(closestSpan);
-
-          if (closestSpan.getName() === 'span') {
-            // 直近のタグがSPANの場合は、既存のSPANのfont-sizeを調整
-            adjustElementFontSize(closestSpan, direction);
-
-            // 既存のSPANを再選択
-            selection.selectRanges([newRange]);
-          } else {
-            // 直近のタグがSPAN以外の場合は、新しいSPANで囲む
-            wrapWithNewSpan(newRange, direction, closestSpan);
-          }
-        }
-      } else {
-        // 選択範囲がある場合
-        // 選択範囲がSPAN要素と完全に一致するかチェック
-        if (isSelectionMatchingSpan(range)) {
-          // 選択範囲がSPAN要素と一致する場合、そのタグのfont-sizeを調整
-          adjustElementFontSize(range.startContainer, direction);
-        } else {
-          // 選択範囲がSPAN要素と一致しない場合、新しいSPANを作成
-          wrapWithNewSpan(range, direction, range.startContainer);
-        }
-      }
-    }
-  }
-
-  // フォントサイズ拡大機能
-  function IncreaseFontSize(editor) {
-    AdjustFontSize(editor, 0.1);
-  }
-  // フォントサイズ縮小機能
-  function DecreaseFontSize(editor) {
-    AdjustFontSize(editor, -0.1);
-  }
-
-  CKEDITOR.on('instanceReady', function (event) {
-    //保存ボタン置換え
-    var overridecmd = new CKEDITOR.command(editor, { exec: SaveFile });
-    event.editor.commands['save'].exec = overridecmd.exec;
-
-    //最大化する
-    event.editor.execCommand('maximize');
-  });
-
   let filename = '';
   //警告を非表示
   CKEDITOR.config.versionCheck = false;
@@ -179,35 +46,176 @@
   CKEDITOR.config.contentsCss = ['./style.css'];
   //HTMLタグとスタイルの制限を解除
   CKEDITOR.config.allowedContent = true;
-  const editor = CKEDITOR.replace('editor1');
 
-  //エディタのプラグインが呼び出される際のcallback
-  editor.on('pluginsLoaded', function (event) {
-    //ファイルを開くボタンを追加する
-    this.ui.addButton('openFile', {
-      label: 'ファイルを開く',
-      command: 'openFile',
-      toolbar: 'document,3',  //ボタンを追加するtoolbarと位置を指定
-      icon: 'https://icongr.am/fontawesome/folder-open-o.svg'
-    });
-    this.addCommand('openFile', { exec: OpenFile });
+  // カスタムボタンプラグインの登録
+  CKEDITOR.plugins.add('customButtons', {
+    init: function (editor) {
+      // エディタの準備が完了したら実行
+      editor.on('instanceReady', function () {
+        // 保存ボタンのコマンドを上書き
+        if (editor.commands.save) {
+          editor.commands.save.exec = function () {
+            SaveFile(editor);
+          };
+        }
 
-    //フォントサイズ拡大ボタンを追加する
-    this.ui.addButton('increaseFontSize', {
-      label: 'フォントサイズ拡大',
-      command: 'increaseFontSize',
-      toolbar: 'basicstyles,1',  //ボタンを追加するtoolbarと位置を指定
-    });
-    this.addCommand('increaseFontSize', { exec: IncreaseFontSize });
+        // エディタを最大化
+        editor.execCommand('maximize');
+      });
 
-    //フォントサイズ縮小ボタンを追加する
-    this.ui.addButton('decreaseFontSize', {
-      label: 'フォントサイズ縮小',
-      command: 'decreaseFontSize',
-      toolbar: 'basicstyles,2',  //ボタンを追加するtoolbarと位置を指定
-    });
-    this.addCommand('decreaseFontSize', { exec: DecreaseFontSize });
+      // フォントサイズ調整機能（em単位でdirection分ずつ）
+      function AdjustFontSize(editor, direction) {
+        // フォントサイズ調整の共通関数（ローカル関数）
+        function adjustElementFontSize(element, direction, sourceElement = null) {
+          const currentSize = getCurrentFontSize(sourceElement || element);
+          const newSize = currentSize + direction;
+          const clampedSize = Math.max(0.5, Math.min(5.0, newSize));
+          element.setStyle('font-size', clampedSize.toFixed(1) + 'em');
+        }
+
+        // 直近のインライン要素（SPAN、STRONG、S、U、EM）を探す関数
+        function findClosestSpan(node) {
+          let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
+          while (element && element.type === CKEDITOR.NODE_ELEMENT) {
+            const tagName = element.getName();
+            if (['span', 'strong', 's', 'u', 'b', 'em'].includes(tagName)) {
+              return element;
+            }
+            element = element.getParent();
+          }
+          return null; // 対象タグが見つからない場合
+        }
+
+        // 選択範囲が単一のSPAN要素と完全に一致するかどうかをチェックする関数
+        function isSelectionMatchingSpan(range) {
+          const startContainer = range.startContainer;
+          const endContainer = range.endContainer;
+          if (startContainer.type === CKEDITOR.NODE_ELEMENT
+            && endContainer.type === CKEDITOR.NODE_ELEMENT) {
+            // SPANのみをチェック（他のインライン要素は新しいSPANで囲む）
+            const startSpan = startContainer.getName() === 'span' ? startContainer : null;
+            const endSpan = endContainer.getName() === 'span' ? endContainer : null;
+            return !!(startSpan && endSpan && startSpan.equals(endSpan));
+          }
+          return false; // 選択範囲がSPAN要素と一致しない場合
+        }
+
+        // 現在のフォントサイズを取得（em単位で返す）
+        function getCurrentFontSize(node) {
+          let element = node.type === CKEDITOR.NODE_TEXT ? node.getParent() : node;
+          while (element && element.type === CKEDITOR.NODE_ELEMENT) {
+            const fontSize = element.getStyle('font-size');
+            if (fontSize) {
+              // font-sizeが見つかったら単位を変換してem値で返す
+              if (fontSize.includes('em')) return parseFloat(fontSize);
+              if (fontSize.includes('px')) return parseFloat(fontSize) / 16;
+              if (fontSize.includes('%')) return parseFloat(fontSize) / 100;
+            }
+            element = element.getParent();
+          }
+          return 1.0; // デフォルトサイズ（1em）
+        }
+
+        // 新しいSPANで囲む共通処理
+        function wrapWithNewSpan(targetRange, direction, sourceElement) {
+          const contents = targetRange.extractContents();
+          const span = new CKEDITOR.dom.element('span');
+
+          // 現在のフォントサイズを取得して新しいSPANに設定
+          adjustElementFontSize(span, direction, sourceElement);
+
+          span.append(contents);
+          targetRange.insertNode(span);
+
+          // DOM操作後の同期待機（CKEditorのDOM更新完了を確実に待つ）
+          setTimeout(() => {
+            // 挿入したSPANの内容を再選択（次回の操作で既存SPANとして認識されるように）
+            const finalRange = editor.createRange();
+            finalRange.selectNodeContents(span);
+            selection.selectRanges([finalRange]);
+          }, 0); // 次のイベントループで実行
+        }
+
+        const selection = editor.getSelection();
+        const ranges = selection.getRanges();
+        if (ranges.length === 0) return;
+
+        for (let i = 0; i < ranges.length; i++) {
+          const range = ranges[i];
+
+          if (range.collapsed) {
+            // 選択範囲がない場合、直近のインライン要素を探す
+            const startContainer = range.startContainer;
+            const closestSpan = findClosestSpan(startContainer);
+
+            if (closestSpan) {
+              // 対象タグが見つかった場合、そのタグの範囲を選択
+              const newRange = editor.createRange();
+              newRange.selectNodeContents(closestSpan);
+
+              if (closestSpan.getName() === 'span') {
+                // 直近のタグがSPANの場合は、既存のSPANのfont-sizeを調整
+                adjustElementFontSize(closestSpan, direction);
+
+                // 既存のSPANを再選択
+                selection.selectRanges([newRange]);
+              } else {
+                // 直近のタグがSPAN以外の場合は、新しいSPANで囲む
+                wrapWithNewSpan(newRange, direction, closestSpan);
+              }
+            }
+          } else {
+            // 選択範囲がある場合
+            // 選択範囲がSPAN要素と完全に一致するかチェック
+            if (isSelectionMatchingSpan(range)) {
+              // 選択範囲がSPAN要素と一致する場合、そのタグのfont-sizeを調整
+              adjustElementFontSize(range.startContainer, direction);
+            } else {
+              // 選択範囲がSPAN要素と一致しない場合、新しいSPANを作成
+              wrapWithNewSpan(range, direction, range.startContainer);
+            }
+          }
+        }
+      }
+
+      // フォントサイズ拡大機能
+      function IncreaseFontSize(editor) {
+        AdjustFontSize(editor, 0.1);
+      }
+      // フォントサイズ縮小機能
+      function DecreaseFontSize(editor) {
+        AdjustFontSize(editor, -0.1);
+      }
+
+      //ファイルを開くボタンを追加する
+      editor.ui.addButton('openFile', {
+        label: 'ファイルを開く',
+        command: 'openFile',
+        toolbar: 'document,3',  //ボタンを追加するtoolbarと位置を指定
+        icon: 'https://icongr.am/fontawesome/folder-open-o.svg'
+      });
+      editor.addCommand('openFile', { exec: OpenFile });
+
+      //フォントサイズ拡大ボタンを追加する
+      editor.ui.addButton('increaseFontSize', {
+        label: 'フォントサイズ拡大',
+        command: 'increaseFontSize',
+        toolbar: 'basicstyles,1',  //ボタンを追加するtoolbarと位置を指定
+      });
+      editor.addCommand('increaseFontSize', { exec: IncreaseFontSize });
+
+      //フォントサイズ縮小ボタンを追加する
+      editor.ui.addButton('decreaseFontSize', {
+        label: 'フォントサイズ縮小',
+        command: 'decreaseFontSize',
+        toolbar: 'basicstyles,2',  //ボタンを追加するtoolbarと位置を指定
+      });
+      editor.addCommand('decreaseFontSize', { exec: DecreaseFontSize });
+    }
   });
+
+  // エディタの初期化（extraPluginsでカスタムプラグインを有効化）
+  CKEDITOR.replace('editor1', { extraPlugins: 'customButtons' });
 
   //ウィンドウを閉じる時に確認メッセージを表示させる
   window.addEventListener('beforeunload', function (event) {
